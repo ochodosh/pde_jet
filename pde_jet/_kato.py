@@ -25,6 +25,7 @@ import jax
 import jax.numpy as jnp
 
 from ._harmonics import project_tracefree
+from ._jet import HarmonicJet
 from ._tensor import frobenius_sq, symmetrize
 
 
@@ -337,3 +338,38 @@ def optimize_higher_kato(
         'analytic_K2': higher_kato_analytic(n),
         'all_K2': all_K2,
     }
+
+
+# ---------------------------------------------------------------------------
+# Jet-level wrappers (for use with optimize_ratio)
+# ---------------------------------------------------------------------------
+
+
+def kato_ratio_from_jet(j: HarmonicJet) -> jnp.ndarray:
+    """Kato ratio K^2 = |T2 T̂₁|^2 / ||T2||^2_F, computed from a HarmonicJet.
+
+    Extracts T¹ = j.tensors[1] and T² = j.tensors[2], then delegates to
+    kato_ratio_direct. Requires k >= 2.
+
+    Args:
+        j: HarmonicJet with k >= 2
+
+    Returns:
+        Scalar K^2 in [0, (n-1)/n].
+    """
+    return kato_ratio_direct(j.tensors[1], j.tensors[2])
+
+
+def higher_kato_ratio_from_jet(j: HarmonicJet) -> jnp.ndarray:
+    r"""Higher Kato ratio R^2 = sum_k <T2, T3_{..k}>^2 / (||T2||^2 ||T3||^2), from jet.
+
+    Extracts T² = j.tensors[2] and T³ = j.tensors[3], then delegates to
+    higher_kato_ratio_direct. Requires k >= 3.
+
+    Args:
+        j: HarmonicJet with k >= 3
+
+    Returns:
+        Scalar R^2 in [0, n/(n+2)].
+    """
+    return higher_kato_ratio_direct(j.tensors[2], j.tensors[3])

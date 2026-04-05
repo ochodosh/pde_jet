@@ -19,14 +19,25 @@ Public API:
         kato_ratio_direct, kato_analytic, kato_optimal_T2, optimize_kato
 """
 
+from ._constraints import (
+    clamp_u_nonneg,
+    fix_grad_norm,
+    fix_tensor_frob_norm,
+    fix_u,
+    optimize_ratio,
+    project_grad_ball,
+    replace_tensor,
+)
 from ._harmonics import harmonic_dim, is_tracefree, project_tracefree
 from ._jet import HarmonicJet, make_harmonic_jet, random_harmonic_jet, zero_jet
 from ._kato import (
     higher_kato_analytic,
     higher_kato_ratio_direct,
+    higher_kato_ratio_from_jet,
     kato_analytic,
     kato_optimal_T2,
     kato_ratio_direct,
+    kato_ratio_from_jet,
     optimize_higher_kato,
     optimize_kato,
 )
@@ -73,4 +84,15 @@ __all__ = [
     "higher_kato_ratio_direct",
     "higher_kato_analytic",
     "optimize_higher_kato",
+    # Jet-level ratio wrappers
+    "kato_ratio_from_jet",
+    "higher_kato_ratio_from_jet",
+    # Constraints
+    "replace_tensor",
+    "fix_u",
+    "clamp_u_nonneg",
+    "fix_grad_norm",
+    "project_grad_ball",
+    "fix_tensor_frob_norm",
+    "optimize_ratio",
 ]
