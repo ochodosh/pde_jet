@@ -21,7 +21,15 @@ Public API:
 
 from ._harmonics import harmonic_dim, is_tracefree, project_tracefree
 from ._jet import HarmonicJet, make_harmonic_jet, random_harmonic_jet, zero_jet
-from ._kato import kato_analytic, kato_optimal_T2, kato_ratio_direct, optimize_kato
+from ._kato import (
+    higher_kato_analytic,
+    higher_kato_ratio_direct,
+    kato_analytic,
+    kato_optimal_T2,
+    kato_ratio_direct,
+    optimize_higher_kato,
+    optimize_kato,
+)
 from ._operators import evaluate_polynomial, gradient_at, hessian_at, kato_ratio_sq
 from ._tensor import (
     contract_vector,
@@ -56,9 +64,13 @@ __all__ = [
     "gradient_at",
     "hessian_at",
     "kato_ratio_sq",
-    # Kato
+    # Kato (|grad |grad u|| vs |D^2 u|)
     "kato_ratio_direct",
     "kato_analytic",
     "kato_optimal_T2",
     "optimize_kato",
+    # Higher Kato (|grad |D^2 u|| vs |D^3 u|)
+    "higher_kato_ratio_direct",
+    "higher_kato_analytic",
+    "optimize_higher_kato",
 ]
