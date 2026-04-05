@@ -14,12 +14,13 @@ Currently implemented: harmonic functions on ℝⁿ.
 
 ```
 pde_jet/
-    _tensor.py      # symmetric tensor primitives (symmetrize, trace, sym_outer, ...)
-    _harmonics.py   # trace-free projection (Fischer decomposition), harmonic_dim
-    _jet.py         # HarmonicJet pytree, constructors
-    _operators.py   # evaluate_polynomial, gradient_at, hessian_at, kato_ratio_sq
-    _kato.py        # Kato ratio, analytic answer, gradient optimizer
-tests/              # 61 tests encoding mathematical theorems
+    _tensor.py       # symmetric tensor primitives (symmetrize, trace, sym_outer, ...)
+    _harmonics.py    # trace-free projection (Fischer decomposition), harmonic_dim
+    _jet.py          # HarmonicJet pytree, constructors
+    _operators.py    # evaluate_polynomial, gradient_at, hessian_at, kato_ratio_sq
+    _kato.py         # Kato ratio, analytic answer, gradient optimizer
+    _constraints.py  # constraint projections (fix_u, fix_grad_norm, ...), optimize_ratio
+tests/               # 104 tests encoding mathematical theorems
 ```
 
 ## Running tests
@@ -30,31 +31,13 @@ pytest tests/
 
 ## Using in Google Colab
 
-Since the repo is private, authenticate with a GitHub personal access token (PAT). In a Colab cell:
+Install directly from the public repo (one-time per session):
 
 ```python
-# 1. Install directly from the private repo (one-time per session)
 import subprocess, sys
-
-GITHUB_TOKEN = "ghp_your_token_here"   # or use Colab Secrets (recommended)
-repo = "ochodosh/pde_jet"
-
 subprocess.run([
     sys.executable, "-m", "pip", "install", "-q",
-    f"git+https://{GITHUB_TOKEN}@github.com/{repo}.git"
-], check=True)
-```
-
-**Recommended: use Colab Secrets** (the key icon in the left sidebar) to store your token as `GITHUB_TOKEN`, then:
-
-```python
-from google.colab import userdata
-import subprocess, sys
-
-token = userdata.get("GITHUB_TOKEN")
-subprocess.run([
-    sys.executable, "-m", "pip", "install", "-q",
-    f"git+https://{token}@github.com/ochodosh/pde_jet.git"
+    "git+https://github.com/ochodosh/pde_jet.git"
 ], check=True)
 ```
 
