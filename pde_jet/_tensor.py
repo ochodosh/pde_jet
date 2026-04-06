@@ -159,3 +159,23 @@ def contract_vector(T: jnp.ndarray, v: jnp.ndarray, axis: int = 0) -> jnp.ndarra
         Shape (n,)*(m-1).
     """
     return jnp.tensordot(T, v, axes=([axis], [0]))
+
+
+def contract_matrix(T: jnp.ndarray, M: jnp.ndarray) -> jnp.ndarray:
+    """Contract the first two indices of T with matrix M.
+
+    Mathematical definition:
+        (T : M)_{i3...im} = sum_{i,j} T_{ij i3...im} M_{ij}
+
+    Useful for expressions like T^(3)_{ijk} M_{ij} (one free index k) or
+    T^(2)_{ij} M_{ij} (scalar double contraction).
+
+    Args:
+        T: shape (n,)*m with m >= 2
+        M: shape (n, n)
+
+    Returns:
+        Shape (n,)*(m-2). For m=2 returns a scalar (shape ()).
+    """
+    assert T.ndim >= 2, f"contract_matrix requires rank >= 2, got rank {T.ndim}"
+    return jnp.tensordot(M, T, axes=([0, 1], [0, 1]))

@@ -84,6 +84,14 @@ def make_harmonic_jet(tensors: tuple, n: int, k: int) -> HarmonicJet:
 
     Returns:
         HarmonicJet with STF tensors for m >= 2.
+
+    Note:
+        This constructor applies symmetrization and trace-free projection to
+        all m >= 2 tensors. If you already have tensors in STF form and want
+        to skip the projection — for example when constructing a specific test
+        jet whose Hessian is a known diagonal trace-free matrix — use
+        HarmonicJet(...) directly. In that case you are responsible for
+        ensuring the STF constraint; use is_tracefree() to verify.
     """
     assert len(tensors) == k + 1, (
         f"Expected {k+1} tensors for a {k}-jet, got {len(tensors)}"
