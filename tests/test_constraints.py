@@ -13,16 +13,19 @@ from pde_jet import (
     fix_grad_norm,
     fix_tensor_frob_norm,
     fix_u,
-    higher_kato_analytic,
-    higher_kato_ratio_from_jet,
-    kato_analytic,
-    kato_ratio_from_jet,
     optimize_ratio,
     project_grad_ball,
     random_harmonic_jet,
     replace_tensor,
 )
 from pde_jet._tensor import frobenius_sq
+
+from examples.kato import (
+    higher_kato_analytic,
+    higher_kato_ratio_from_jet,
+    kato_analytic,
+    kato_ratio_from_jet,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +265,7 @@ def test_fix_tensor_frob_norm_other_tensors_unchanged():
 
 
 def test_kato_ratio_from_jet_matches_direct():
-    from pde_jet import kato_ratio_direct
+    from examples.kato import kato_ratio_direct
 
     key = jax.random.PRNGKey(0)
     j = random_harmonic_jet(key, n=3, k=2)
@@ -272,7 +275,7 @@ def test_kato_ratio_from_jet_matches_direct():
 
 
 def test_higher_kato_ratio_from_jet_matches_direct():
-    from pde_jet import higher_kato_ratio_direct
+    from examples.kato import higher_kato_ratio_direct
 
     key = jax.random.PRNGKey(0)
     j = random_harmonic_jet(key, n=3, k=3)

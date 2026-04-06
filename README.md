@@ -17,10 +17,12 @@ pde_jet/
     _tensor.py       # symmetric tensor primitives (symmetrize, trace, sym_outer, ...)
     _harmonics.py    # trace-free projection (Fischer decomposition), harmonic_dim
     _jet.py          # HarmonicJet pytree, constructors
-    _operators.py    # evaluate_polynomial, gradient_at, hessian_at, kato_ratio_sq
-    _kato.py         # Kato ratio, analytic answer, gradient optimizer
+    _operators.py    # evaluate_polynomial, gradient_at, hessian_at
     _constraints.py  # constraint projections (fix_u, fix_grad_norm, ...), optimize_ratio
-tests/               # 104 tests encoding mathematical theorems
+examples/
+    kato.py          # Kato inequality: sharp constants K^2=(n-1)/n, K'^2=n/(n+2)
+    test_kato.py     # tests for the Kato example (run with: pytest examples/)
+tests/               # 83 core tests encoding mathematical theorems
 ```
 
 ## Running tests

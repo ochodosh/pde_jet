@@ -13,10 +13,11 @@ Public API:
         project_tracefree, is_tracefree, harmonic_dim
 
     Operators (evaluation at a point):
-        evaluate_polynomial, gradient_at, hessian_at, kato_ratio_sq
+        evaluate_polynomial, gradient_at, hessian_at
 
-    Kato inequality:
-        kato_ratio_direct, kato_analytic, kato_optimal_T2, optimize_kato
+    Constraints and optimization:
+        replace_tensor, fix_u, clamp_u_nonneg, fix_grad_norm,
+        project_grad_ball, fix_tensor_frob_norm, optimize_ratio
 """
 
 from ._constraints import (
@@ -30,18 +31,7 @@ from ._constraints import (
 )
 from ._harmonics import harmonic_dim, is_tracefree, project_tracefree
 from ._jet import HarmonicJet, make_harmonic_jet, random_harmonic_jet, zero_jet
-from ._kato import (
-    higher_kato_analytic,
-    higher_kato_ratio_direct,
-    higher_kato_ratio_from_jet,
-    kato_analytic,
-    kato_optimal_T2,
-    kato_ratio_direct,
-    kato_ratio_from_jet,
-    optimize_higher_kato,
-    optimize_kato,
-)
-from ._operators import evaluate_polynomial, gradient_at, hessian_at, kato_ratio_sq
+from ._operators import evaluate_polynomial, gradient_at, hessian_at
 from ._tensor import (
     contract_vector,
     delta_sym,
@@ -74,19 +64,6 @@ __all__ = [
     "evaluate_polynomial",
     "gradient_at",
     "hessian_at",
-    "kato_ratio_sq",
-    # Kato (|grad |grad u|| vs |D^2 u|)
-    "kato_ratio_direct",
-    "kato_analytic",
-    "kato_optimal_T2",
-    "optimize_kato",
-    # Higher Kato (|grad |D^2 u|| vs |D^3 u|)
-    "higher_kato_ratio_direct",
-    "higher_kato_analytic",
-    "optimize_higher_kato",
-    # Jet-level ratio wrappers
-    "kato_ratio_from_jet",
-    "higher_kato_ratio_from_jet",
     # Constraints
     "replace_tensor",
     "fix_u",
