@@ -7,13 +7,16 @@ Public API:
 
     Tensor primitives:
         symmetrize, trace, full_trace_k, delta_sym, sym_outer,
-        frobenius_sq, contract_vector
+        frobenius_sq, contract_vector, contract_matrix
 
     Harmonic tools:
         project_tracefree, is_tracefree, harmonic_dim
 
     Operators (evaluation at a point):
-        evaluate_polynomial, gradient_at, hessian_at
+        evaluate_polynomial, gradient_at, hessian_at, laplacian_at
+
+    Scalar functional helpers (chain-rule at origin):
+        gradient_of_scalar_functional, laplacian_of_scalar_functional
 
     Constraints and optimization:
         replace_tensor, fix_u, clamp_u_nonneg, fix_grad_norm,
@@ -22,6 +25,7 @@ Public API:
 
 from ._eigenfunction import (
     EigenfunctionJet,
+    _reproject_eigenfunction as reproject_eigenfunction,
     make_eigenfunction_jet,
     random_eigenfunction_jet,
     zero_eigenfunction_jet,
@@ -35,10 +39,15 @@ from ._constraints import (
     project_grad_ball,
     replace_tensor,
 )
+from ._functionals import (
+    gradient_of_scalar_functional,
+    laplacian_of_scalar_functional,
+)
 from ._harmonics import harmonic_dim, is_tracefree, project_tracefree
 from ._jet import HarmonicJet, make_harmonic_jet, random_harmonic_jet, zero_jet
-from ._operators import evaluate_polynomial, gradient_at, hessian_at
+from ._operators import evaluate_polynomial, gradient_at, hessian_at, laplacian_at
 from ._tensor import (
+    contract_matrix,
     contract_vector,
     delta_sym,
     frobenius_sq,
@@ -62,6 +71,7 @@ __all__ = [
     "sym_outer",
     "frobenius_sq",
     "contract_vector",
+    "contract_matrix",
     # Harmonic tools
     "project_tracefree",
     "is_tracefree",
@@ -70,11 +80,16 @@ __all__ = [
     "evaluate_polynomial",
     "gradient_at",
     "hessian_at",
+    "laplacian_at",
+    # Scalar functional helpers
+    "gradient_of_scalar_functional",
+    "laplacian_of_scalar_functional",
     # EigenfunctionJet
     "EigenfunctionJet",
     "make_eigenfunction_jet",
     "zero_eigenfunction_jet",
     "random_eigenfunction_jet",
+    "reproject_eigenfunction",
     # Constraints
     "replace_tensor",
     "fix_u",

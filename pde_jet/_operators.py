@@ -17,7 +17,7 @@ import math
 import jax.numpy as jnp
 
 from ._jet import HarmonicJet
-from ._tensor import contract_vector
+from ._tensor import contract_vector, trace
 
 
 def _contract_m_times(T: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
@@ -112,6 +112,35 @@ def hessian_at(j: HarmonicJet, x: jnp.ndarray) -> jnp.ndarray:
             contracted = contract_vector(contracted, x, axis=2)
         # contracted now has shape (n, n).
         result = result + contracted / math.factorial(m - 2)
+    return result
+
+
+def laplacian_at(j: HarmonicJet, x: jnp.ndarray) -> jnp.ndarray:
+    """Laplacian of the Taylor polynomial at x.
+
+    Δp_k(x) = sum_{m=2}^{k} (1/(m-2)!) tr(T^(m))_{i3...im} x_{i3}...x_{im}
+
+    where tr contracts the first two indices: tr(T)_{i3...im} = T_{ii i3...im}.
+
+    Derivation: applying Δ to the m-th term (1/m!) T_{i1...im} x_{i1}...x_{im}
+    and summing over the Laplacian index yields m(m-1)/m! = 1/(m-2)! copies of
+    tr(T) contracted with x^{m-2}.
+
+    For harmonic jets, tr(T^(m)) = 0 for all m >= 2 (STF constraint), so this
+    returns 0 identically. The function is included for completeness and for use
+    with non-harmonic polynomial data.
+
+    Args:
+        j: HarmonicJet (or any jet-like object with .tensors and .k)
+        x: shape (n,)
+
+    Returns:
+        Scalar.
+    """
+    result = jnp.zeros((), dtype=j.tensors[0].dtype)
+    for m in range(2, j.k + 1):
+        tr_T = trace(j.tensors[m])          # shape (n,)*(m-2); scalar when m=2
+        result = result + _contract_m_times(tr_T, x) / math.factorial(m - 2)
     return result
 
 

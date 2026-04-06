@@ -190,12 +190,16 @@ def optimize_ratio(
     dtype=jnp.float32,
     init_fn=None,
     reproject_fn=None,
+    minimize: bool = False,
+    extra_params=None,
+    extra_lr=None,
 ) -> dict:
-    """Gradient ascent to maximize ratio_fn over constrained k-jets in R^n.
+    """Gradient ascent (or descent) to optimize ratio_fn over constrained k-jets.
 
     Each step:
-      1. Compute gradient of ratio_fn w.r.t. all jet tensors (via jax.grad).
-      2. Gradient update: j ← j + lr * grad.
+      1. Compute gradient of ratio_fn w.r.t. all jet tensors (and extra_params
+         if provided), via jax.grad.
+      2. Gradient update: j ← j ± lr * grad  (+ for maximize, − for minimize).
       3. Re-project to enforce PDE constraint (STF for harmonic, or custom).
       4. Apply user projections in the given order.
 
@@ -209,14 +213,15 @@ def optimize_ratio(
     (fix_grad_norm, fix_tensor_frob_norm) should typically come last.
 
     Args:
-        ratio_fn: jet → scalar, the objective to maximize.
+        ratio_fn: jet → scalar (or (jet, params) → scalar when extra_params
+                  is provided), the objective to optimize.
                   Must be differentiable via jax.grad.
         n: spatial dimension.
         k: jet order. Jets have tensors T⁰, ..., T^k.
-        num_steps: gradient ascent steps per restart.
+        num_steps: gradient ascent/descent steps per restart.
         key: JAX PRNGKey.
         projections: tuple of (jet → jet), applied after each step.
-        lr: learning rate.
+        lr: learning rate for jet tensors.
         num_restarts: number of random restarts (run in parallel via vmap).
         dtype: JAX dtype for tensor initialization.
         init_fn: callable(key, n, k, dtype) → jet used for initialization.
@@ -228,42 +233,114 @@ def optimize_ratio(
         reproject_fn: callable(jet) → jet applied after each gradient step to
                       restore the PDE constraint. Defaults to _reproject_harmonic
                       (STF projection for harmonic jets). For eigenfunction jets
-                      pass _reproject_eigenfunction from pde_jet._eigenfunction.
+                      pass pde_jet.reproject_eigenfunction.
+        minimize: if True, minimize ratio_fn instead of maximizing it.
+                  The returned 'best_ratio' is then the minimum found.
+        extra_params: optional JAX pytree of additional parameters passed to
+                      ratio_fn as a second argument: ratio_fn(j, params).
+                      These are optimized jointly with the jet tensors.
+                      If None, ratio_fn is called with only the jet.
+        extra_lr: learning rate for extra_params. Defaults to lr.
 
     Returns:
         dict with keys:
             'best_ratio': best ratio found across all restarts (scalar).
-            'all_ratios': shape (num_restarts,) array of final ratios per restart.
+            'best_jet':   jet achieving the best ratio (HarmonicJet).
+            'all_ratios': shape (num_restarts,) array of final ratios.
+            'all_jets':   batched jet of all final jets (tensors have a
+                          leading num_restarts axis).
+        When extra_params is provided, also includes:
+            'best_params': extra_params at the best restart.
+            'all_params':  batched extra_params across all restarts.
     """
     _init = init_fn if init_fn is not None else (
         lambda key_r, n, k, dtype: random_harmonic_jet(key_r, n, k, dtype=dtype)
     )
     _reproject = reproject_fn if reproject_fn is not None else _reproject_harmonic
+    _extra_lr = extra_lr if extra_lr is not None else lr
 
-    grad_fn = jax.grad(ratio_fn)
+    # sign: +1 to ascend (maximize), -1 to descend (minimize)
+    sign = -1.0 if minimize else 1.0
 
-    def _one_restart(key_r):
-        j = _init(key_r, n, k, dtype)
-        # Apply initial projections so the starting point is feasible.
-        j = _reproject(j)
-        for p in projections:
-            j = p(j)
+    has_extra = extra_params is not None
 
-        def _step(j, _):
-            g = grad_fn(j)
-            j = jax.tree_util.tree_map(lambda x, dg: x + lr * dg, j, g)
+    if has_extra:
+        grad_fn = jax.grad(ratio_fn, argnums=(0, 1))
+
+        def _one_restart(key_r):
+            j = _init(key_r, n, k, dtype)
             j = _reproject(j)
             for p in projections:
                 j = p(j)
-            return j, None
 
-        j_final, _ = jax.lax.scan(_step, j, None, length=num_steps)
-        return ratio_fn(j_final)
+            def _step(carry, _):
+                j, params = carry
+                g_j, g_p = grad_fn(j, params)
+                j = jax.tree_util.tree_map(
+                    lambda x, dg: x + sign * lr * dg, j, g_j
+                )
+                params = jax.tree_util.tree_map(
+                    lambda p, dp: p + sign * _extra_lr * dp, params, g_p
+                )
+                j = _reproject(j)
+                for p_fn in projections:
+                    j = p_fn(j)
+                return (j, params), None
 
-    keys = jax.random.split(key, num_restarts)
-    all_ratios = jax.vmap(_one_restart)(keys)
+            (j_final, params_final), _ = jax.lax.scan(
+                _step, (j, extra_params), None, length=num_steps
+            )
+            return ratio_fn(j_final, params_final), j_final, params_final
 
-    return {
-        'best_ratio': jnp.max(all_ratios),
-        'all_ratios': all_ratios,
-    }
+        keys = jax.random.split(key, num_restarts)
+        all_ratios, all_jets, all_params = jax.vmap(_one_restart)(keys)
+
+        best_idx = jnp.argmin(all_ratios) if minimize else jnp.argmax(all_ratios)
+        best_ratio = jnp.min(all_ratios) if minimize else jnp.max(all_ratios)
+        best_jet = jax.tree_util.tree_map(lambda x: x[best_idx], all_jets)
+        best_params = jax.tree_util.tree_map(lambda x: x[best_idx], all_params)
+
+        return {
+            'best_ratio': best_ratio,
+            'best_jet': best_jet,
+            'best_params': best_params,
+            'all_ratios': all_ratios,
+            'all_jets': all_jets,
+            'all_params': all_params,
+        }
+
+    else:
+        grad_fn = jax.grad(ratio_fn)
+
+        def _one_restart(key_r):
+            j = _init(key_r, n, k, dtype)
+            j = _reproject(j)
+            for p in projections:
+                j = p(j)
+
+            def _step(j, _):
+                g = grad_fn(j)
+                j = jax.tree_util.tree_map(
+                    lambda x, dg: x + sign * lr * dg, j, g
+                )
+                j = _reproject(j)
+                for p in projections:
+                    j = p(j)
+                return j, None
+
+            j_final, _ = jax.lax.scan(_step, j, None, length=num_steps)
+            return ratio_fn(j_final), j_final
+
+        keys = jax.random.split(key, num_restarts)
+        all_ratios, all_jets = jax.vmap(_one_restart)(keys)
+
+        best_idx = jnp.argmin(all_ratios) if minimize else jnp.argmax(all_ratios)
+        best_ratio = jnp.min(all_ratios) if minimize else jnp.max(all_ratios)
+        best_jet = jax.tree_util.tree_map(lambda x: x[best_idx], all_jets)
+
+        return {
+            'best_ratio': best_ratio,
+            'best_jet': best_jet,
+            'all_ratios': all_ratios,
+            'all_jets': all_jets,
+        }
