@@ -36,18 +36,21 @@ def replace_tensor(j: HarmonicJet, m: int, val: jnp.ndarray) -> HarmonicJet:
     """Return a new jet with tensors[m] replaced by val.
 
     All other tensors are unchanged. This is the only function that directly
-    modifies the tensors tuple of a HarmonicJet.
+    modifies the tensors tuple of a jet. Works for HarmonicJet and
+    EigenfunctionJet (preserves the concrete type and all metadata).
 
     Args:
-        j: source jet
+        j: source jet (HarmonicJet or EigenfunctionJet)
         m: index of the tensor to replace (0 <= m <= j.k)
         val: replacement array; must have shape (j.n,)*m
 
     Returns:
-        HarmonicJet with tensors[m] = val, all others from j.
+        Same type as j, with tensors[m] = val, all others from j.
     """
     new_tensors = tuple(val if i == m else t for i, t in enumerate(j.tensors))
-    return HarmonicJet(new_tensors, j.n, j.k)
+    if hasattr(j, 'lam'):
+        return type(j)(new_tensors, j.n, j.k, j.lam)
+    return type(j)(new_tensors, j.n, j.k)
 
 
 # ---------------------------------------------------------------------------
@@ -185,13 +188,15 @@ def optimize_ratio(
     lr: float = 0.01,
     num_restarts: int = 8,
     dtype=jnp.float32,
+    init_fn=None,
+    reproject_fn=None,
 ) -> dict:
-    """Gradient ascent to maximize ratio_fn over constrained harmonic k-jets in R^n.
+    """Gradient ascent to maximize ratio_fn over constrained k-jets in R^n.
 
     Each step:
       1. Compute gradient of ratio_fn w.r.t. all jet tensors (via jax.grad).
       2. Gradient update: j ← j + lr * grad.
-      3. Re-project all T^m (m ≥ 2) to STF to restore harmonic constraint.
+      3. Re-project to enforce PDE constraint (STF for harmonic, or custom).
       4. Apply user projections in the given order.
 
     Multiple random restarts are run in parallel via vmap.
@@ -204,35 +209,50 @@ def optimize_ratio(
     (fix_grad_norm, fix_tensor_frob_norm) should typically come last.
 
     Args:
-        ratio_fn: HarmonicJet → scalar, the objective to maximize.
+        ratio_fn: jet → scalar, the objective to maximize.
                   Must be differentiable via jax.grad.
         n: spatial dimension.
         k: jet order. Jets have tensors T⁰, ..., T^k.
         num_steps: gradient ascent steps per restart.
         key: JAX PRNGKey.
-        projections: tuple of (HarmonicJet → HarmonicJet), applied after each step.
+        projections: tuple of (jet → jet), applied after each step.
         lr: learning rate.
         num_restarts: number of random restarts (run in parallel via vmap).
         dtype: JAX dtype for tensor initialization.
+        init_fn: callable(key, n, k, dtype) → jet used for initialization.
+                 Defaults to random_harmonic_jet (harmonic jets).
+                 For eigenfunction jets pass random_eigenfunction_jet
+                 wrapped with the desired lam, e.g.:
+                     init_fn=lambda key, n, k, dtype: random_eigenfunction_jet(
+                         key, n, k, lam=1.0, dtype=dtype)
+        reproject_fn: callable(jet) → jet applied after each gradient step to
+                      restore the PDE constraint. Defaults to _reproject_harmonic
+                      (STF projection for harmonic jets). For eigenfunction jets
+                      pass _reproject_eigenfunction from pde_jet._eigenfunction.
 
     Returns:
         dict with keys:
             'best_ratio': best ratio found across all restarts (scalar).
             'all_ratios': shape (num_restarts,) array of final ratios per restart.
     """
+    _init = init_fn if init_fn is not None else (
+        lambda key_r, n, k, dtype: random_harmonic_jet(key_r, n, k, dtype=dtype)
+    )
+    _reproject = reproject_fn if reproject_fn is not None else _reproject_harmonic
+
     grad_fn = jax.grad(ratio_fn)
 
     def _one_restart(key_r):
-        j = random_harmonic_jet(key_r, n, k, dtype=dtype)
+        j = _init(key_r, n, k, dtype)
         # Apply initial projections so the starting point is feasible.
-        j = _reproject_harmonic(j)
+        j = _reproject(j)
         for p in projections:
             j = p(j)
 
         def _step(j, _):
             g = grad_fn(j)
             j = jax.tree_util.tree_map(lambda x, dg: x + lr * dg, j, g)
-            j = _reproject_harmonic(j)
+            j = _reproject(j)
             for p in projections:
                 j = p(j)
             return j, None

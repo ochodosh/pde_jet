@@ -20,6 +20,12 @@ Public API:
         project_grad_ball, fix_tensor_frob_norm, optimize_ratio
 """
 
+from ._eigenfunction import (
+    EigenfunctionJet,
+    make_eigenfunction_jet,
+    random_eigenfunction_jet,
+    zero_eigenfunction_jet,
+)
 from ._constraints import (
     clamp_u_nonneg,
     fix_grad_norm,
@@ -64,6 +70,11 @@ __all__ = [
     "evaluate_polynomial",
     "gradient_at",
     "hessian_at",
+    # EigenfunctionJet
+    "EigenfunctionJet",
+    "make_eigenfunction_jet",
+    "zero_eigenfunction_jet",
+    "random_eigenfunction_jet",
     # Constraints
     "replace_tensor",
     "fix_u",
