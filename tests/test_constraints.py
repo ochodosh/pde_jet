@@ -425,3 +425,119 @@ def test_project_grad_ball_keeps_t1_inside_ball():
     )
     # The best ratio must be ≤ r^2 * kato_analytic (since |T¹|^2 ≤ r^2)
     assert result['best_ratio'] <= r ** 2 * kato_analytic(3) + 1e-4
+
+
+# ---------------------------------------------------------------------------
+# optimize_ratio — saddle-point mode (extra_minimize)
+# ---------------------------------------------------------------------------
+
+
+def test_extra_minimize_false_maximizes_params():
+    """extra_minimize=False ascends on extra_params each step.
+
+    f(jet, h) = kato_ratio(jet) + h  has  ∂f/∂h = 1  everywhere, so the
+    h-trajectory is independent of the jet.  After num_steps steps from h=0
+    with extra_lr=lr_h:
+
+        h_final = 0 + num_steps * lr_h   (maximize)
+
+    This holds for every restart because ∂f/∂h ≡ 1.
+    """
+    key = jax.random.PRNGKey(0)
+    h0 = jnp.array(0.0)
+    num_steps = 10
+    lr_h = 0.1
+
+    def f(j, h):
+        return kato_ratio_from_jet(j) + h
+
+    result = optimize_ratio(
+        f,
+        n=3, k=2, num_steps=num_steps, key=key,
+        projections=(fix_grad_norm(1.0), fix_tensor_frob_norm(2, 1.0)),
+        lr=0.01, num_restarts=2,
+        extra_params=h0, extra_lr=lr_h,
+        minimize=False, extra_minimize=False,
+    )
+
+    expected_h = h0 + num_steps * lr_h  # = 1.0
+    assert jnp.allclose(result['all_params'], expected_h, atol=1e-5), (
+        f"expected h={expected_h}, got {result['all_params']}"
+    )
+
+
+def test_extra_minimize_true_minimizes_params():
+    """extra_minimize=True descends on extra_params each step.
+
+    Same setup as above; with extra_minimize=True:
+
+        h_final = 0 - num_steps * lr_h   (minimize)
+    """
+    key = jax.random.PRNGKey(0)
+    h0 = jnp.array(0.0)
+    num_steps = 10
+    lr_h = 0.1
+
+    def f(j, h):
+        return kato_ratio_from_jet(j) + h
+
+    result = optimize_ratio(
+        f,
+        n=3, k=2, num_steps=num_steps, key=key,
+        projections=(fix_grad_norm(1.0), fix_tensor_frob_norm(2, 1.0)),
+        lr=0.01, num_restarts=2,
+        extra_params=h0, extra_lr=lr_h,
+        minimize=False, extra_minimize=True,
+    )
+
+    expected_h = h0 - num_steps * lr_h  # = -1.0
+    assert jnp.allclose(result['all_params'], expected_h, atol=1e-5), (
+        f"expected h={expected_h}, got {result['all_params']}"
+    )
+
+
+def test_saddle_point_signs_are_independent():
+    """Jet and params update signs are independent.
+
+    With minimize=True (descend jet) and extra_minimize=False (ascend params):
+      - final h > h0  (ascended)
+      - best_ratio is selected as the minimum across restarts
+
+    With minimize=False (ascend jet) and extra_minimize=True (descend params):
+      - final h < h0  (descended)
+      - best_ratio is selected as the maximum across restarts
+    """
+    key = jax.random.PRNGKey(1)
+    h0 = jnp.array(0.0)
+
+    def f(j, h):
+        return kato_ratio_from_jet(j) + h
+
+    result_mp = optimize_ratio(
+        f,
+        n=3, k=2, num_steps=20, key=key,
+        projections=(fix_grad_norm(1.0), fix_tensor_frob_norm(2, 1.0)),
+        lr=0.01, num_restarts=4,
+        extra_params=h0, extra_lr=0.05,
+        minimize=True, extra_minimize=False,  # min jet, max params
+    )
+    result_pm = optimize_ratio(
+        f,
+        n=3, k=2, num_steps=20, key=key,
+        projections=(fix_grad_norm(1.0), fix_tensor_frob_norm(2, 1.0)),
+        lr=0.01, num_restarts=4,
+        extra_params=h0, extra_lr=0.05,
+        minimize=False, extra_minimize=True,  # max jet, min params
+    )
+
+    # min-jet / max-params: h ascended
+    assert jnp.all(result_mp['all_params'] > h0), (
+        "min_jet/max_params: params should increase"
+    )
+    # max-jet / min-params: h descended
+    assert jnp.all(result_pm['all_params'] < h0), (
+        "max_jet/min_params: params should decrease"
+    )
+    # best selected from jet perspective
+    assert result_mp['best_ratio'] == jnp.min(result_mp['all_ratios'])
+    assert result_pm['best_ratio'] == jnp.max(result_pm['all_ratios'])
