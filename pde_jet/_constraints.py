@@ -193,6 +193,7 @@ def optimize_ratio(
     minimize: bool = False,
     extra_params=None,
     extra_lr=None,
+    extra_minimize: bool = False,
 ) -> dict:
     """Gradient ascent (or descent) to optimize ratio_fn over constrained k-jets.
 
@@ -211,6 +212,18 @@ def optimize_ratio(
 
     Projection order: projections may not commute. Norm-fixing projections
     (fix_grad_norm, fix_tensor_frob_norm) should typically come last.
+
+    Saddle-point mode: when extra_params is provided, `minimize` and
+    `extra_minimize` can be set independently, enabling convex-concave
+    saddle-point problems. For example, to solve max_θ min_jet f(jet, θ):
+
+        optimize_ratio(f, ..., extra_params=θ0,
+                       minimize=True, extra_minimize=False)
+
+    The jet is updated with sign determined by `minimize`; extra_params with
+    sign determined by `extra_minimize`. The returned 'best_ratio' and
+    'best_jet' are selected according to `minimize` (best from the jet's
+    perspective across restarts).
 
     Args:
         ratio_fn: jet → scalar (or (jet, params) → scalar when extra_params
@@ -234,13 +247,21 @@ def optimize_ratio(
                       restore the PDE constraint. Defaults to _reproject_harmonic
                       (STF projection for harmonic jets). For eigenfunction jets
                       pass pde_jet.reproject_eigenfunction.
-        minimize: if True, minimize ratio_fn instead of maximizing it.
-                  The returned 'best_ratio' is then the minimum found.
+        minimize: if True, minimize ratio_fn over jet tensors instead of
+                  maximizing. The returned 'best_ratio' is then the minimum
+                  found.
         extra_params: optional JAX pytree of additional parameters passed to
                       ratio_fn as a second argument: ratio_fn(j, params).
                       These are optimized jointly with the jet tensors.
                       If None, ratio_fn is called with only the jet.
         extra_lr: learning rate for extra_params. Defaults to lr.
+        extra_minimize: if True, minimize over extra_params; if False (default),
+                        maximize over extra_params. Only used when extra_params
+                        is provided. Setting minimize=True and extra_minimize=False
+                        gives a min_jet max_params saddle point; setting
+                        minimize=False and extra_minimize=True gives max_jet
+                        min_params. When both flags agree, the behavior is
+                        equivalent to joint optimization with a single sign.
 
     Returns:
         dict with keys:
@@ -265,6 +286,7 @@ def optimize_ratio(
     has_extra = extra_params is not None
 
     if has_extra:
+        param_sign = -1.0 if extra_minimize else 1.0
         grad_fn = jax.grad(ratio_fn, argnums=(0, 1))
 
         def _one_restart(key_r):
@@ -280,7 +302,7 @@ def optimize_ratio(
                     lambda x, dg: x + sign * lr * dg, j, g_j
                 )
                 params = jax.tree_util.tree_map(
-                    lambda p, dp: p + sign * _extra_lr * dp, params, g_p
+                    lambda p, dp: p + param_sign * _extra_lr * dp, params, g_p
                 )
                 j = _reproject(j)
                 for p_fn in projections:
