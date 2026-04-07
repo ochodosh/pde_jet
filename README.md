@@ -8,7 +8,7 @@ A **k-jet** of a function u at the origin is the tuple of derivative tensors `(T
 
 Currently implemented: harmonic functions and eigenfunctions (Δu + λu = 0) on ℝⁿ.
 
-**Sample application — Kato inequality.** For harmonic u, the sharp constant K in |∇|∇u|| ≤ K|D²u| satisfies K² = (n−1)/n. The library finds this numerically via gradient ascent on the Kato ratio over jet space, and verifies it against the analytic formula.
+**Toy application — Kato inequality.** For harmonic u, the sharp constant K in |∇|∇u|| ≤ K|D²u| satisfies K² = (n−1)/n. The library finds this numerically via gradient ascent on the Kato ratio over jet space.
 
 ## Structure
 
