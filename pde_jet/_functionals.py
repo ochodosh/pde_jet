@@ -55,11 +55,33 @@ Laplacian ΔW|₀ (for f = f(u, s) only; see note below):
     does depend on hess_frob_sq, users must provide the additional terms.
 """
 
+import inspect
+
 import jax
 import jax.numpy as jnp
 
 from ._jet import HarmonicJet
 from ._tensor import contract_matrix, frobenius_sq
+
+
+def _ensure_3args(f):
+    """Wrap a 2-argument callable f(u, s) into f(u, s, q) for uniform use.
+
+    If f already accepts 3 (or more) positional arguments, it is returned
+    unchanged. If it accepts exactly 2, it is wrapped so the third argument q
+    is accepted but silently ignored. This lets callers pass f(u, s) directly
+    without an artificial lambda.
+
+    Arity detection uses inspect.signature; if the signature cannot be
+    determined (e.g., for built-in C functions) f is returned as-is.
+    """
+    try:
+        n = len(inspect.signature(f).parameters)
+    except (ValueError, TypeError):
+        return f
+    if n == 2:
+        return lambda u, s, q: f(u, s)
+    return f
 
 
 def gradient_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
@@ -75,14 +97,16 @@ def gradient_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
     The T³ term is included only when j.k ≥ 3.
 
     Args:
-        f: callable (u, grad_sq, hess_frob_sq) -> scalar, JAX-differentiable.
-           Use `lambda u, s, q: f(u, s)` for functionals independent of
-           hess_frob_sq.
+        f: callable (u, grad_sq[, hess_frob_sq]) -> scalar, JAX-differentiable.
+           Accepts either 2 arguments (u, grad_sq) or 3 arguments
+           (u, grad_sq, hess_frob_sq). 2-argument functions are wrapped
+           automatically; the hess_frob_sq derivative is then zero.
         j: HarmonicJet with k >= 2.
 
     Returns:
         Shape (n,) gradient vector.
     """
+    f = _ensure_3args(f)
     u0 = j.tensors[0]
     g = j.tensors[1]
     H = j.tensors[2]
@@ -119,14 +143,17 @@ def laplacian_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
     See module docstring for the full derivation.
 
     Args:
-        f: callable (u, grad_sq, hess_frob_sq) -> scalar, JAX-differentiable.
-           Use `lambda u, s, q: f(u, s)` for functionals independent of
-           hess_frob_sq.
+        f: callable (u, grad_sq[, hess_frob_sq]) -> scalar, JAX-differentiable.
+           Accepts either 2 arguments (u, grad_sq) or 3 arguments
+           (u, grad_sq, hess_frob_sq). 2-argument functions are wrapped
+           automatically. Only the (u, grad_sq) partial derivatives enter
+           the Laplacian formula; hess_frob_sq dependence is ignored.
         j: HarmonicJet with k >= 2.
 
     Returns:
         Scalar ΔW at the origin.
     """
+    f = _ensure_3args(f)
     u0 = j.tensors[0]
     g = j.tensors[1]
     H = j.tensors[2]

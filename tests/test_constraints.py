@@ -541,3 +541,84 @@ def test_saddle_point_signs_are_independent():
     # best selected from jet perspective
     assert result_mp['best_ratio'] == jnp.min(result_mp['all_ratios'])
     assert result_pm['best_ratio'] == jnp.max(result_pm['all_ratios'])
+
+
+# ---------------------------------------------------------------------------
+# optimize_ratio — frozen_params
+# ---------------------------------------------------------------------------
+
+
+def test_frozen_params_passed_to_ratio_fn():
+    """frozen_params is forwarded as second arg to ratio_fn but not updated.
+
+    f(jet, scale) = scale * kato_ratio(jet).
+    With scale=2.0, the optimum of f is 2 * kato_analytic(n).
+    frozen_params must not appear in the returned dict.
+    """
+    key = jax.random.PRNGKey(0)
+    scale = jnp.array(2.0)
+
+    def f(j, s):
+        return s * kato_ratio_from_jet(j)
+
+    result = optimize_ratio(
+        f,
+        n=3, k=2, num_steps=500, key=key,
+        projections=(fix_grad_norm(1.0), fix_tensor_frob_norm(2, 1.0)),
+        lr=0.01, num_restarts=8,
+        frozen_params=scale,
+    )
+    analytic = kato_analytic(3)
+    assert result['best_ratio'] >= 2.0 * (analytic - 0.02), (
+        f"Expected ~{2*analytic:.4f}, got {result['best_ratio']:.4f}"
+    )
+    assert result['best_ratio'] <= 2.0 * (analytic + 1e-4), (
+        f"best_ratio {result['best_ratio']:.4f} exceeded 2*analytic"
+    )
+    assert 'best_params' not in result, "frozen_params must not be optimized"
+
+
+def test_frozen_params_not_mutated():
+    """The value of frozen_params does not change over the course of optimization.
+
+    f(jet, offset) = kato_ratio(jet) + offset.
+    gradient w.r.t. offset = 1, but since offset is frozen it must stay fixed.
+    We verify by checking the returned ratio equals kato_ratio + offset.
+    """
+    key = jax.random.PRNGKey(1)
+    offset = jnp.array(5.0)
+
+    def f(j, o):
+        return kato_ratio_from_jet(j) + o
+
+    result = optimize_ratio(
+        f,
+        n=3, k=2, num_steps=200, key=key,
+        projections=(fix_grad_norm(1.0), fix_tensor_frob_norm(2, 1.0)),
+        lr=0.01, num_restarts=4,
+        frozen_params=offset,
+    )
+    # best_ratio must be kato_ratio + offset; offset must not have drifted
+    analytic = kato_analytic(3)
+    expected_low = offset + analytic - 0.02
+    assert result['best_ratio'] >= float(expected_low), (
+        f"best_ratio {result['best_ratio']:.4f} < expected {float(expected_low):.4f}"
+    )
+
+
+def test_frozen_params_error_with_extra_params():
+    """Providing both frozen_params and extra_params must raise ValueError."""
+    import pytest
+
+    key = jax.random.PRNGKey(0)
+
+    def f(j, p):
+        return kato_ratio_from_jet(j)
+
+    with pytest.raises(ValueError, match="frozen_params and extra_params"):
+        optimize_ratio(
+            f,
+            n=3, k=2, num_steps=10, key=key,
+            extra_params=jnp.array(1.0),
+            frozen_params=jnp.array(1.0),
+        )

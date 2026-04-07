@@ -260,6 +260,7 @@ def optimize_ratio(
     extra_minimize: bool = False,
     optimizer=None,
     tangent_proj_fn=None,
+    frozen_params=None,
 ) -> dict:
     """Gradient ascent (or descent) to optimize ratio_fn over constrained k-jets.
 
@@ -343,6 +344,14 @@ def optimize_ratio(
                          of the constraint manifold. Applied before each
                          optimizer step. Use sphere_tangent_proj(indices) to
                          construct this for sphere-constrained components.
+        frozen_params: optional JAX pytree of parameters passed to ratio_fn
+                       as a second argument — ratio_fn(j, frozen_params) —
+                       but excluded from gradient computation. Unlike
+                       extra_params, frozen_params are never updated. JAX
+                       treats them as traced arrays (not Python closures), so
+                       the scan/vmap is compiled once and reused when
+                       frozen_params changes value between calls. Cannot be
+                       combined with extra_params.
 
     Returns:
         dict with keys:
@@ -365,6 +374,11 @@ def optimize_ratio(
     sign = -1.0 if minimize else 1.0
 
     has_extra = extra_params is not None
+    has_frozen = frozen_params is not None
+    if has_frozen and has_extra:
+        raise ValueError(
+            "frozen_params and extra_params cannot both be specified."
+        )
     use_optax = optimizer is not None and optimizer != 'lbfgs'
 
     # -----------------------------------------------------------------------
@@ -388,30 +402,58 @@ def optimize_ratio(
         # ambient space; projections are applied before every evaluation.
         # The gradient of this composed objective is J_project^T * grad_f,
         # which equals the Riemannian gradient for sphere projections.
-        def projected_obj(j_params):
-            j = _reproject(j_params)
-            for p_fn in projections:
-                j = p_fn(j)
-            val = ratio_fn(j)
-            # jaxopt.LBFGS minimizes; negate for maximization
-            return -val if not minimize else val
+        if has_frozen:
+            def projected_obj(j_params, fp):
+                j = _reproject(j_params)
+                for p_fn in projections:
+                    j = p_fn(j)
+                val = ratio_fn(j, fp)
+                # jaxopt.LBFGS minimizes; negate for maximization
+                return -val if not minimize else val
 
-        solver = jaxopt.LBFGS(fun=projected_obj, maxiter=num_steps)
+            solver = jaxopt.LBFGS(fun=projected_obj, maxiter=num_steps)
 
-        def _one_restart(key_r):
-            j0 = _init(key_r, n, k, dtype)
-            j0 = _reproject(j0)
-            for p_fn in projections:
-                j0 = p_fn(j0)
-            lbfgs_result = solver.run(j0)
-            # Final projection to ensure constraint is exactly satisfied
-            j_final = _reproject(lbfgs_result.params)
-            for p_fn in projections:
-                j_final = p_fn(j_final)
-            return ratio_fn(j_final), j_final
+            def _one_restart(key_r, fp):
+                j0 = _init(key_r, n, k, dtype)
+                j0 = _reproject(j0)
+                for p_fn in projections:
+                    j0 = p_fn(j0)
+                lbfgs_result = solver.run(j0, fp)
+                # Final projection to ensure constraint is exactly satisfied
+                j_final = _reproject(lbfgs_result.params)
+                for p_fn in projections:
+                    j_final = p_fn(j_final)
+                return ratio_fn(j_final, fp), j_final
 
-        keys = jax.random.split(key, num_restarts)
-        all_ratios, all_jets = jax.vmap(_one_restart)(keys)
+            keys = jax.random.split(key, num_restarts)
+            all_ratios, all_jets = jax.vmap(
+                _one_restart, in_axes=(0, None)
+            )(keys, frozen_params)
+        else:
+            def projected_obj(j_params):
+                j = _reproject(j_params)
+                for p_fn in projections:
+                    j = p_fn(j)
+                val = ratio_fn(j)
+                # jaxopt.LBFGS minimizes; negate for maximization
+                return -val if not minimize else val
+
+            solver = jaxopt.LBFGS(fun=projected_obj, maxiter=num_steps)
+
+            def _one_restart(key_r):
+                j0 = _init(key_r, n, k, dtype)
+                j0 = _reproject(j0)
+                for p_fn in projections:
+                    j0 = p_fn(j0)
+                lbfgs_result = solver.run(j0)
+                # Final projection to ensure constraint is exactly satisfied
+                j_final = _reproject(lbfgs_result.params)
+                for p_fn in projections:
+                    j_final = p_fn(j_final)
+                return ratio_fn(j_final), j_final
+
+            keys = jax.random.split(key, num_restarts)
+            all_ratios, all_jets = jax.vmap(_one_restart)(keys)
 
         best_idx = jnp.argmin(all_ratios) if minimize else jnp.argmax(all_ratios)
         best_ratio = jnp.min(all_ratios) if minimize else jnp.max(all_ratios)
@@ -521,62 +563,123 @@ def optimize_ratio(
         }
 
     else:
-        grad_fn = jax.grad(ratio_fn)
+        if has_frozen:
+            _grad_fn = jax.grad(ratio_fn, argnums=0)
 
-        if use_optax:
-            def _one_restart(key_r):
-                j = _init(key_r, n, k, dtype)
-                j = _reproject(j)
-                for p_fn in projections:
-                    j = p_fn(j)
-                opt_state = optimizer.init(j)
-
-                def _step(carry, _):
-                    j, opt_state = carry
-                    g = grad_fn(j)
-                    if tangent_proj_fn is not None:
-                        g = tangent_proj_fn(j, g)
-                    g_for_opt = jax.tree_util.tree_map(
-                        lambda dg: -sign * dg, g
-                    )
-                    updates, new_opt_state = optimizer.update(
-                        g_for_opt, opt_state, j
-                    )
-                    j = _optax.apply_updates(j, updates)
+            if use_optax:
+                def _one_restart(key_r, fp):
+                    j = _init(key_r, n, k, dtype)
                     j = _reproject(j)
                     for p_fn in projections:
                         j = p_fn(j)
-                    return (j, new_opt_state), None
+                    opt_state = optimizer.init(j)
 
-                (j_final, _), _ = jax.lax.scan(
-                    _step, (j, opt_state), None, length=num_steps
-                )
-                return ratio_fn(j_final), j_final
+                    def _step(carry, _):
+                        j, opt_state = carry
+                        g = _grad_fn(j, fp)
+                        if tangent_proj_fn is not None:
+                            g = tangent_proj_fn(j, g)
+                        g_for_opt = jax.tree_util.tree_map(
+                            lambda dg: -sign * dg, g
+                        )
+                        updates, new_opt_state = optimizer.update(
+                            g_for_opt, opt_state, j
+                        )
+                        j = _optax.apply_updates(j, updates)
+                        j = _reproject(j)
+                        for p_fn in projections:
+                            j = p_fn(j)
+                        return (j, new_opt_state), None
+
+                    (j_final, _), _ = jax.lax.scan(
+                        _step, (j, opt_state), None, length=num_steps
+                    )
+                    return ratio_fn(j_final, fp), j_final
+
+            else:
+                def _one_restart(key_r, fp):
+                    j = _init(key_r, n, k, dtype)
+                    j = _reproject(j)
+                    for p_fn in projections:
+                        j = p_fn(j)
+
+                    def _step(j, _):
+                        g = _grad_fn(j, fp)
+                        if tangent_proj_fn is not None:
+                            g = tangent_proj_fn(j, g)
+                        j = jax.tree_util.tree_map(
+                            lambda x, dg: x + sign * lr * dg, j, g
+                        )
+                        j = _reproject(j)
+                        for p_fn in projections:
+                            j = p_fn(j)
+                        return j, None
+
+                    j_final, _ = jax.lax.scan(_step, j, None, length=num_steps)
+                    return ratio_fn(j_final, fp), j_final
+
+            keys = jax.random.split(key, num_restarts)
+            all_ratios, all_jets = jax.vmap(
+                _one_restart, in_axes=(0, None)
+            )(keys, frozen_params)
 
         else:
-            def _one_restart(key_r):
-                j = _init(key_r, n, k, dtype)
-                j = _reproject(j)
-                for p_fn in projections:
-                    j = p_fn(j)
+            grad_fn = jax.grad(ratio_fn)
 
-                def _step(j, _):
-                    g = grad_fn(j)
-                    if tangent_proj_fn is not None:
-                        g = tangent_proj_fn(j, g)
-                    j = jax.tree_util.tree_map(
-                        lambda x, dg: x + sign * lr * dg, j, g
-                    )
+            if use_optax:
+                def _one_restart(key_r):
+                    j = _init(key_r, n, k, dtype)
                     j = _reproject(j)
                     for p_fn in projections:
                         j = p_fn(j)
-                    return j, None
+                    opt_state = optimizer.init(j)
 
-                j_final, _ = jax.lax.scan(_step, j, None, length=num_steps)
-                return ratio_fn(j_final), j_final
+                    def _step(carry, _):
+                        j, opt_state = carry
+                        g = grad_fn(j)
+                        if tangent_proj_fn is not None:
+                            g = tangent_proj_fn(j, g)
+                        g_for_opt = jax.tree_util.tree_map(
+                            lambda dg: -sign * dg, g
+                        )
+                        updates, new_opt_state = optimizer.update(
+                            g_for_opt, opt_state, j
+                        )
+                        j = _optax.apply_updates(j, updates)
+                        j = _reproject(j)
+                        for p_fn in projections:
+                            j = p_fn(j)
+                        return (j, new_opt_state), None
 
-        keys = jax.random.split(key, num_restarts)
-        all_ratios, all_jets = jax.vmap(_one_restart)(keys)
+                    (j_final, _), _ = jax.lax.scan(
+                        _step, (j, opt_state), None, length=num_steps
+                    )
+                    return ratio_fn(j_final), j_final
+
+            else:
+                def _one_restart(key_r):
+                    j = _init(key_r, n, k, dtype)
+                    j = _reproject(j)
+                    for p_fn in projections:
+                        j = p_fn(j)
+
+                    def _step(j, _):
+                        g = grad_fn(j)
+                        if tangent_proj_fn is not None:
+                            g = tangent_proj_fn(j, g)
+                        j = jax.tree_util.tree_map(
+                            lambda x, dg: x + sign * lr * dg, j, g
+                        )
+                        j = _reproject(j)
+                        for p_fn in projections:
+                            j = p_fn(j)
+                        return j, None
+
+                    j_final, _ = jax.lax.scan(_step, j, None, length=num_steps)
+                    return ratio_fn(j_final), j_final
+
+            keys = jax.random.split(key, num_restarts)
+            all_ratios, all_jets = jax.vmap(_one_restart)(keys)
 
         best_idx = jnp.argmin(all_ratios) if minimize else jnp.argmax(all_ratios)
         best_ratio = jnp.min(all_ratios) if minimize else jnp.max(all_ratios)
