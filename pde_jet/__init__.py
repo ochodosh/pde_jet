@@ -20,7 +20,19 @@ Public API:
 
     Constraints and optimization:
         replace_tensor, fix_u, clamp_u_nonneg, fix_grad_norm,
-        project_grad_ball, fix_tensor_frob_norm, optimize_ratio
+        project_grad_ball, fix_tensor_frob_norm, sphere_tangent_proj,
+        optimize_ratio
+
+    optimize_ratio supports three optimizer modes:
+        optimizer=None              plain projected gradient ascent/descent
+        optimizer=optax.Optimizer   any optax.GradientTransformation (e.g. adam)
+        optimizer='lbfgs'           jaxopt.LBFGS (second-order, recommended for
+                                    adversarial / high-accuracy settings)
+
+    For sphere-constrained problems (fix_grad_norm, fix_tensor_frob_norm),
+    pass tangent_proj_fn=sphere_tangent_proj([m1, m2, ...]) to project the
+    Euclidean gradient onto the Riemannian tangent space before each optimizer
+    step. Required for correctness with momentum-based optimizers.
 """
 
 from ._eigenfunction import (
@@ -38,6 +50,7 @@ from ._constraints import (
     optimize_ratio,
     project_grad_ball,
     replace_tensor,
+    sphere_tangent_proj,
 )
 from ._functionals import (
     gradient_of_scalar_functional,
@@ -90,12 +103,13 @@ __all__ = [
     "zero_eigenfunction_jet",
     "random_eigenfunction_jet",
     "reproject_eigenfunction",
-    # Constraints
+    # Constraints and optimization
     "replace_tensor",
     "fix_u",
     "clamp_u_nonneg",
     "fix_grad_norm",
     "project_grad_ball",
     "fix_tensor_frob_norm",
+    "sphere_tangent_proj",
     "optimize_ratio",
 ]
