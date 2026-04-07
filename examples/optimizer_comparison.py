@@ -22,6 +22,20 @@ Note on step budget: L-BFGS performs line searches (multiple function
 evaluations per step), so its wall-clock cost per step is higher.
 num_steps here means maxiter (L-BFGS steps), not function evaluations.
 
+Observed results (300 steps, 16 restarts, n=2..5, GD lr=0.05, Adam lr=0.02):
+    - GD and GD+Riem converged to float32 noise (~1e-7 error, ~1e-14 variance)
+      on all restarts for all n. Riemannian correction made no visible difference
+      here; the step size is small enough that off-manifold drift is negligible.
+    - Adam (no Riem) degraded with n: best K² missed by ~4e-6 at n=4, ~6e-6
+      at n=5, with several restarts stuck well below the optimum (variance ~1e-7).
+    - Adam+Riem partially reduced variance but did not eliminate the best-case gap.
+    - L-BFGS matched GD accuracy on best K² while collapsing restart variance to
+      ~1e-13 at n=4,5 — essentially all restarts landed at the same solution.
+
+These results are specific to the Kato landscape (smooth, compact, low-dimensional).
+Re-run this script if using different ratio functions, higher jet orders, or
+float64, as the relative optimizer performance can change.
+
 Usage:
     python examples/optimizer_comparison.py
     # or from the repo root:
