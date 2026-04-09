@@ -31,6 +31,15 @@ This is a mathematical library. **99% correct is failure.** Every implementation
 - Avoid in-place mutation. All data structures are immutable (JAX pytrees or named tuples).
 - When writing a new operation, ask: can this be expressed as a sequence of `jnp` primitives that `vmap`/`jit` can handle without retracing?
 
+## Jupyter Notebooks
+
+Notebooks in `notebooks/` are Colab-ready experiment scripts. When creating or editing them:
+
+- **Verify execution order before finishing.** Mentally step through every cell 0→N and confirm each cell only references names defined in earlier cells. Never leave a cell that uses a variable defined in a later cell.
+- **Natural narrative order:** imports → definitions → training/computation → plots → inspection. Do not put inspect/plot cells before the training loop that produces the data they display.
+- **After any NotebookEdit that reorders or splits cells**, re-read the full cell list (e.g. via Bash + `python3 -c "import json; ..."`) and verify the order is correct before reporting done.
+- Notebooks are gitignored; keep them Colab-compatible (pip install cell at top, no local paths).
+
 ## Conventions
 
 - **Dimension** `n`: the ambient space dimension (e.g., `n=3` for 3D harmonic functions).
