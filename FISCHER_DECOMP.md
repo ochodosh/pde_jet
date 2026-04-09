@@ -242,5 +242,3 @@ For s=1: sym(δ ⊗ τ)_{ijk} = (δ_{ij}τ_k + δ_{ik}τ_j + δ_{jk}τ_i)/3 (for
 $$\textrm{tr}\!\left(\textrm{sym}(\delta \otimes \tau)\right)_{i_3 \cdots i_m} = \frac{n + 2(m-2)}{m(m-1)/2 \cdot \binom{m}{2}^{-1}}\, \tau_{i_3 \cdots i_m} + \text{lower-order trace terms}.$$
 
 The precise constant depends on m and n and is the key quantity used in deriving b(m,1,n) from the trace-cancellation condition.
-
----
