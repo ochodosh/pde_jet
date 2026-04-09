@@ -22,10 +22,13 @@ Usage:
 import jax
 import jax.numpy as jnp
 
+import jax
+
 from pde_jet import (
+    evaluate_polynomial,
+    fix_grad_norm,
+    fix_tensor_frob_norm,
     frobenius_sq,
-    gradient_at,
-    hessian_at,
     optimize_ratio,
     project_tracefree,
     symmetrize,
@@ -94,8 +97,8 @@ def kato_ratio_at_point(
     Returns:
         Scalar in [0, (n-1)/n].
     """
-    g = gradient_at(j, x)
-    H = hessian_at(j, x)
+    g = jax.grad(evaluate_polynomial, argnums=1)(j, x)
+    H = jax.hessian(evaluate_polynomial, argnums=1)(j, x)
     g_norm_sq = jnp.sum(g ** 2)
     H_norm_sq = frobenius_sq(H)
     safe = (g_norm_sq > eps ** 2) & (H_norm_sq > eps ** 2)
