@@ -68,7 +68,7 @@ def gradient_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
     Returns:
         Shape (n,) gradient vector.
     """
-    u0 = j.tensors[0]
+u0 = j.tensors[0]
     g = j.tensors[1]
     H = j.tensors[2]
     s = jnp.dot(g, g)
