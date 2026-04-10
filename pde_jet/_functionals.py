@@ -44,7 +44,6 @@ from ._jet import HarmonicJet
 from ._operators import evaluate_polynomial
 from ._tensor import contract_matrix, frobenius_sq
 
-
 # ---------------------------------------------------------------------------
 # Closed-form interface: W = f(u, |∇u|², ||D²u||²_F)
 # ---------------------------------------------------------------------------
@@ -68,7 +67,7 @@ def gradient_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
     Returns:
         Shape (n,) gradient vector.
     """
-u0 = j.tensors[0]
+    u0 = j.tensors[0]
     g = j.tensors[1]
     H = j.tensors[2]
     s = jnp.dot(g, g)
@@ -119,10 +118,12 @@ def laplacian_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
     f_uu, f_us, f_ss = hess[0][0], hess[0][1], hess[1][1]
 
     Hg = H @ g
-    return (f_uu * s
-            + 4.0 * f_us * jnp.dot(g, Hg)
-            + 4.0 * f_ss * jnp.dot(Hg, Hg)
-            + 2.0 * f_s  * frobenius_sq(H))
+    return (
+        f_uu * s
+        + 4.0 * f_us * jnp.dot(g, Hg)
+        + 4.0 * f_ss * jnp.dot(Hg, Hg)
+        + 2.0 * f_s * frobenius_sq(H)
+    )
 
 
 # ---------------------------------------------------------------------------
