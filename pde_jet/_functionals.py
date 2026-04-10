@@ -74,9 +74,7 @@ def gradient_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
     s = jnp.dot(g, g)
     q = frobenius_sq(H)
 
-    f_u = jax.grad(f, argnums=0)(u0, s, q)
-    f_s = jax.grad(f, argnums=1)(u0, s, q)
-    f_q = jax.grad(f, argnums=2)(u0, s, q)
+    f_u, f_s, f_q = jax.grad(f, argnums=(0, 1, 2))(u0, s, q)
 
     Hg = H @ g
     result = f_u * g + 2.0 * f_s * Hg
@@ -116,10 +114,9 @@ def laplacian_of_scalar_functional(f, j: HarmonicJet) -> jnp.ndarray:
     s = jnp.dot(g, g)
     q = frobenius_sq(H)
 
-    f_s  = jax.grad(f, argnums=1)(u0, s, q)
-    f_uu = jax.grad(jax.grad(f, argnums=0), argnums=0)(u0, s, q)
-    f_us = jax.grad(jax.grad(f, argnums=0), argnums=1)(u0, s, q)
-    f_ss = jax.grad(jax.grad(f, argnums=1), argnums=1)(u0, s, q)
+    f_s = jax.grad(f, argnums=1)(u0, s, q)
+    hess = jax.hessian(f, argnums=(0, 1))(u0, s, q)
+    f_uu, f_us, f_ss = hess[0][0], hess[0][1], hess[1][1]
 
     Hg = H @ g
     return (f_uu * s
@@ -164,6 +161,29 @@ def jet_functional_gradient(W_fn, j: HarmonicJet) -> jnp.ndarray:
         return W_fn(lambda z: evaluate_polynomial(j, z), x)
 
     return jax.grad(W_at)(x0)
+
+
+def jet_functional_grad_and_laplacian(W_fn, j: HarmonicJet):
+    """Gradient and Laplacian of W at x=0, computed together.
+
+    Same interface as jet_functional_gradient / jet_functional_laplacian, but
+    builds the polynomial closure once and reuses it for both computations.
+
+    Args:
+        W_fn: callable (eval_fn, x) -> scalar.
+        j:    HarmonicJet.
+
+    Returns:
+        (grad_W, lap_W): shape (n,) gradient and scalar Laplacian.
+    """
+    x0 = jnp.zeros(j.n, dtype=j.tensors[0].dtype)
+
+    def W_at(x):
+        return W_fn(lambda z: evaluate_polynomial(j, z), x)
+
+    grad_W = jax.grad(W_at)(x0)
+    lap_W = jnp.trace(jax.hessian(W_at)(x0))
+    return grad_W, lap_W
 
 
 def jet_functional_laplacian(W_fn, j: HarmonicJet) -> jnp.ndarray:

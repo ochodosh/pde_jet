@@ -19,8 +19,9 @@ Polynomial evaluation:
 Functional calculus:
     gradient_of_scalar_functional  — ∇W|₀ for W = f(u, |∇u|², ||D²u||²_F) (closed-form)
     laplacian_of_scalar_functional — ΔW|₀ for W = f(u, |∇u|²) (closed-form)
-    jet_functional_gradient        — ∇W|₀ for arbitrary W via nested autodiff
-    jet_functional_laplacian       — ΔW|₀ for arbitrary W via nested autodiff
+    jet_functional_gradient             — ∇W|₀ for arbitrary W via nested autodiff
+    jet_functional_laplacian            — ΔW|₀ for arbitrary W via nested autodiff
+    jet_functional_grad_and_laplacian   — both at once (single polynomial closure)
 
 Constraint projections:
     replace_tensor          — functional update of one tensor in a jet
@@ -55,6 +56,7 @@ from ._constraints import (
 )
 from ._functionals import (
     gradient_of_scalar_functional,
+    jet_functional_grad_and_laplacian,
     jet_functional_gradient,
     jet_functional_laplacian,
     laplacian_of_scalar_functional,
@@ -78,6 +80,7 @@ __all__ = [
     "laplacian_of_scalar_functional",
     "jet_functional_gradient",
     "jet_functional_laplacian",
+    "jet_functional_grad_and_laplacian",
     # Constraint projections
     "replace_tensor",
     "fix_u",
